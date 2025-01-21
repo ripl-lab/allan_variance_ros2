@@ -1,0 +1,5 @@
+---
+output_bags:
+  - uri: ros2_bag_mcap
+    storage_id: mcap
+    all: true

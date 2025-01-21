@@ -1,0 +1,106 @@
+# Use the official Ubuntu 22.04 image
+FROM ubuntu:jammy-20240808 AS base
+
+# Set environment variables for non-interactive installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG uid=1002:1002
+ARG gid=1002:1002
+ARG username=local
+
+# Update and install necessary packages
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    lsb-release \
+    curl \
+    gnupg2 \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    vim \
+    openssh-server \
+    python3-pip
+
+RUN add-apt-repository universe
+
+# Add the ROS 2 GPG key with apt
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+# Add the ROS 2 repository to apt sources list
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# Install ROS 2 Humble
+RUN apt-get update && apt-get install -y ros-humble-desktop
+
+# Install ROS 2 development tools
+RUN apt install -y ros-dev-tools ros-humble-rosbag2 ros-humble-rosbag2-storage-mcap
+
+# Set the ROS 2 environment variables
+ENV ROS_DISTRO=humble
+
+# Install pip requirements
+RUN pip3 install scipy numpy matplotlib rosbags ruff tqdm
+
+# Install mcap cli
+RUN wget https://github.com/foxglove/mcap/releases/download/releases%2Fmcap-cli%2Fv0.0.50/mcap-linux-amd64 && \
+    chmod +x mcap-linux-amd64 && \
+    mv mcap-linux-amd64 /usr/local/bin/mcap
+
+# Create a workspace
+RUN mkdir -p /home/$username/ros2_ws/src
+WORKDIR /home/$username/ros2_ws
+
+# Setup environment
+SHELL ["/bin/bash", "-c"]
+
+# User setup
+RUN useradd -m $username -l -u "$(echo $uid | cut -d: -f1)" \
+    && usermod -u "$(echo $uid | cut -d: -f1)" $username \
+    && groupmod -g "$(echo $gid | cut -d: -f2)" $username \
+    && usermod -aG sudo,video,dialout,plugdev,audio $username \
+    && echo $username ' ALL=(ALL:ALL) NOPASSWD:ALL' >> /etc/sudoers \
+    && mkdir -p /home/$username/.cache /home/$username/.ssh \
+    && ssh-keyscan github.com >> /home/$username/.ssh/known_hosts \
+    && chown -R $username:$username /home/$username \
+    && chown -R $username:$username /home/$username/ros2_ws
+
+# Install Realsense packages
+RUN apt-get install -qy guvcview libssl-dev libusb-1.0-0-dev libudev-dev pkg-config libgtk-3-dev wget
+RUN apt-get install -qy libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev at
+
+# Install Realsense ROS 2 Wrapper requirements
+RUN source /opt/ros/humble/setup.bash && \
+    sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list' && \
+    curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add - && \
+    apt install -y ros-humble-realsense2-* && \
+    apt install -y python3-rosdep
+
+# # Install Realsense SDK
+# RUN mkdir -p /etc/apt/keyrings && \
+#     curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | sudo tee /etc/apt/keyrings/librealsense.pgp > /dev/null && \
+#     echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo `lsb_release -cs` main" | sudo tee /etc/apt/sources.list.d/librealsense.list && \
+#     sudo apt-get update && \
+#     sudo apt-get install -y librealsense2-dkms && \
+#     sudo apt-get install -y librealsense2-utils && \
+#     sudo apt-get install -y librealsense2-dev && \
+#     sudo apt-get install -y librealsense2-dbg
+
+RUN cd /home/$username && git clone https://github.com/IntelRealSense/librealsense.git && \
+    cd librealsense && yes | ./scripts/setup_udev_rules.sh && \
+    yes | ./scripts/patch-realsense-ubuntu-lts-hwe.sh || true && \
+    mkdir build && cd build && cmake .. -DBUILD_EXAMPLES=true -DCMAKE_BUILD_TYPE=Release -DFORCE_LIBUVC=true && \
+    make uninstall && make clean && make -j$(($(nproc)-1)) && sudo make -j$(($(nproc)-1)) install
+
+# Clone the RealSense ROS 2 wrapper
+RUN cd /home/$username/ros2_ws/src && \
+    git clone https://github.com/IntelRealSense/realsense-ros.git -b ros2-master && \
+    cd /home/$username/ros2_ws && \
+    sudo rosdep init && \
+    rosdep update && \
+    rosdep install -i --from-path src --rosdistro humble --skip-keys=librealsense2 -y
+
+USER $username
+
+# Set the default command to run when starting the container
+CMD ["bash"]
