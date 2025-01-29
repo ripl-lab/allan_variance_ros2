@@ -29,6 +29,8 @@ If not using the devcontainer and you want to record data from the RealSense D43
 ## ROS2 package which loads a mcap file of IMU data and computes Allan Variance parameters
 The purpose of this tool is to read a long sequence of IMU data and compute the Angle Random Walk (ARW), Bias Instability and Gyro Random Walk for the gyroscope as well as Velocity Random Walk (VRW), Bias Instability and Accel Random Walk for the accelerometer.
 
+This tool is a ROS2 compatible iteration on the original [allan_variance_ros](https://github.com/ori-drs/allan_variance_ros).
+
 The mcap is expected to have the imu data in the message type [sensor_msgs/msg/Imu](https://docs.ros2.org/foxy/api/sensor_msgs/msg/Imu.html).
 
 While there are many open source tools which do the same thing, this package has the following features:
@@ -57,7 +59,7 @@ To make the Allan Variance computation tool run faster, you can reorganize the R
 
 This will compute the Allan Deviation for the IMU and generate a CSV.
 
-  ``python3 src/allan_variance_computer.py --input_mcap mcaps/cooked_mcap/cooked_mcap.mcap --output_dir allan_variance --imu_config_yaml config/realsense_d425i.yaml``
+  ``python3 src/allan_variance_computer.py --input_mcap mcaps/cooked_mcap/cooked_mcap.mcap --output_dir allan_variance --imu_config_yaml config/realsense_d435i.yaml``
 
 ### Visualize the Allan Deviation and Generate Kalibr Config
 
@@ -67,7 +69,7 @@ The next step is to visualize the plots and get parameters. For this run:
 
   If you have a config file to set the topic and update rate, you can pass it in as well:
 
-  ``python3 src/allan_variance_analysis.py --data allan_variance/allan_variance.csv --config config/realsense_d425i.yaml``
+  ``python3 src/allan_variance_analysis.py --data allan_variance/allan_variance.csv --config config/realsense_d435i.yaml``
 
   Press `space` to go to next figure.
 
@@ -167,9 +169,9 @@ If you use this package for academic work, please consider using the citation be
 @software{AllanVarianceRos2,
   author       = {Jai Prajapati},
   title        = {Allan Variance ROS2},
-  month        = Jan,
+  month        = Feb,
   year         = 2025,
-  publisher    = {University of Waterloo, RIPL Lab},
+  publisher    = {RIPL Lab, University of Waterloo},
   version      = {1.0},
   url          = {https://github.com/ripl-lab/allan_variance_ros2}
 }
